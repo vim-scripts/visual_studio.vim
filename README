@@ -1,0 +1,14 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=864
+
+
+NEW IN VERSION 1.2
+
+* Switch between multiple instance of Visual Studio
+* Build projects and access project file heirarchy directly from Vim
+* Support for Visual Studio 2003, 2005 and 2008
+
+Thanks to Henrik Öhman for contributions to this version.
+
+See the visual_studio.vim help page for more information:
+  http://www.plan10.com/vim/visual-studio/doc/1.2
+
