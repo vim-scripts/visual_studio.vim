@@ -1,7 +1,14 @@
 " Visual Studio .NET integration with Vim
 "
-" Copyright (c) 2003 Michael Graz
+" Copyright (c) 2003,2004 Michael Graz
 " mgraz.vim@plan10.com
+"
+" Version 1.1 May-04
+" Support for compiling & building
+" Thanks to Leif Wickland for contributing to this feature
+"
+" Version 1.0 Dec-03
+" Base functionality
 
 if exists('loaded_plugin_visual_studio')
     finish
@@ -14,20 +21,26 @@ let loaded_plugin_visual_studio = 1
 if has('gui') && ( ! exists('g:visual_studio_menu') || g:visual_studio_menu != 0 )
     amenu <silent> &VisualStudio.&Get\ File :call DTEGetFile()<cr>
     amenu <silent> &VisualStudio.&Put\ File :call DTEPutFile()<cr>
-    amenu <silent> &VisualStudio.&Task\ List :call DTETaskList(g:visual_studio_quickfix_height)<cr>
-    amenu <silent> &VisualStudio.&Find\ Results\ 1 :call DTEFindResults(g:visual_studio_quickfix_height, 1)<cr>
-    amenu <silent> &VisualStudio.Find\ Results\ &2 :call DTEFindResults(g:visual_studio_quickfix_height, 2)<cr>
+    amenu <silent> &VisualStudio.&Task\ List :call DTETaskList()<cr>
+    amenu <silent> &VisualStudio.&Output :call DTEOutput()<cr>
+    amenu <silent> &VisualStudio.&Find\ Results\ 1 :call DTEFindResults(1)<cr>
+    amenu <silent> &VisualStudio.Find\ Results\ &2 :call DTEFindResults(2)<cr>
+    amenu <silent> &VisualStudio.&Compile :call DTECompileFile()<cr>
+    amenu <silent> &VisualStudio.&Build\ Solution :call DTEBuildSolution()<cr>
 endif
 
 "----------------------------------------------------------------------
 " Mapping setup
 
 if ! exists ('g:visual_studio_mapping') || g:visual_studio_mapping != 0
-    nmap <silent> <Leader>vg :call DTEGetFile()<cr>
     nmap <silent> <Leader>vp :call DTEPutFile()<cr>
-    nmap <silent> <Leader>vt :call DTETaskList(g:visual_studio_quickfix_height)<cr>
-    nmap <silent> <Leader>vf :call DTEFindResults(g:visual_studio_quickfix_height, 1)<cr>
-    nmap <silent> <Leader>v2 :call DTEFindResults(g:visual_studio_quickfix_height, 2)<cr>
+    nmap <silent> <Leader>vt :call DTETaskList()<cr>
+    nmap <silent> <Leader>vo :call DTEOutput()<cr>
+    nmap <silent> <Leader>vf :call DTEFindResults(1)<cr>
+    nmap <silent> <Leader>v2 :call DTEFindResults(2)<cr>
+    nmap <silent> <Leader>vg :call DTEGetFile()<cr>
+    nmap <silent> <Leader>vc :call DTECompileFile()<cr>
+    nmap <silent> <Leader>vb :call DTEBuildSolution()<cr>
 endif
 
 "----------------------------------------------------------------------
@@ -39,6 +52,9 @@ endif
 if ! exists ('g:visual_studio_task_list')
     let g:visual_studio_task_list = escape($TEMP,'\').'\\vs_task_list.txt'
 endif
+if ! exists ('g:visual_studio_output')
+    let g:visual_studio_output = escape($TEMP,'\').'\\vs_output.txt'
+endif
 if ! exists ('g:visual_studio_find_results_1')
     let g:visual_studio_find_results_1 = escape($TEMP,'\').'\\vs_find_results_1.txt'
 endif
@@ -48,8 +64,15 @@ endif
 if ! exists ('g:visual_studio_quickfix_height')
     let g:visual_studio_quickfix_height = 20
 endif
+if ! exists ('g:visual_studio_quickfix_errorformat')
+    let g:visual_studio_quickfix_errorformat =
+\       escape ('\ %#%f(%l)\ :\ %t%*\\D%n:\ %m,\\\ %#%f(%l\\,%c)\:\ %t%*\\D%n:\ %m', '\')
+endif
 if ! exists ('g:visual_studio_python_exe')
     let g:visual_studio_python_exe = 'python.exe'
+endif
+if ! exists ('g:visual_studio_write_before_build')
+    let g:visual_studio_write_before_build = 1
 endif
 
 "----------------------------------------------------------------------
@@ -96,6 +119,22 @@ endfunction
 
 "----------------------------------------------------------------------
 
+function! <Sid>GetPid()
+    try
+        let pid = libcallnr ('msvcrt.dll', '_getpid', '')
+        return pid
+    catch
+    endtry
+    try
+        let pid = libcallnr ('crtdll.dll', '_getpid', '')
+        return pid
+    catch
+    endtry
+    return 0
+endfunction
+
+"----------------------------------------------------------------------
+
 function! <Sid>DTEExec(fcn_py, ...)
     if ! <Sid>PythonInit()
         return
@@ -119,23 +158,18 @@ function! <Sid>DTEExec(fcn_py, ...)
     if s:visual_studio_has_python
         exe 'python '.s:visual_studio_module.'.'.a:fcn_py.'('.args.')'
     else
+        let pid = <Sid>GetPid()
+        if pid > 0
+            let args = args . ' pid=' . pid
+        endif
         exe system(g:visual_studio_python_exe.' '.s:visual_studio_module.' '.a:fcn_py.' '.args)
     endif
 endfunction
 
 "----------------------------------------------------------------------
 
-function! <Sid>QuickFixOpen(quickfix_height)
-    if a:quickfix_height > 0
-        exe 'copen '.a:quickfix_height
-    endif
-    cfile
-endfunction
-
-"----------------------------------------------------------------------
-
 function! DTEGetFile()
-    call <Sid>DTEExec ('dte_get_file')
+    call <Sid>DTEExec ('dte_get_file', &modified)
 endfunction
 
 "----------------------------------------------------------------------
@@ -144,23 +178,35 @@ function! DTEPutFile()
     let filename = escape(expand('%:p'),'\')
     if filename == ''
         echo 'No vim file!'
-        return
+        return 0
     endif
-    call <Sid>DTEExec ('dte_put_file', filename, line('.'), col('.'))
+"     XX TODO remove
+"     if &modified == 1
+"         write
+"     endif
+    call <Sid>DTEExec ('dte_put_file', filename, &modified, line('.'), col('.'))
+    return 1
 endfunction
 
 "----------------------------------------------------------------------
 
-function! DTETaskList(quickfix_height)
+function! DTETaskList()
     let &errorfile = g:visual_studio_task_list
-    call <Sid>DTEExec ('dte_task_list', &errorfile)
-    set errorformat=%f(%l)\ :\ %t%*\\D%n:\ %m,%f(%l)\ :\ %m
-    call <Sid>QuickFixOpen (a:quickfix_height)
+    call <Sid>DTEExec ('dte_task_list', &errorfile,
+\       g:visual_studio_quickfix_height, '%f(%l)\ %#:\ %#%m')
 endfunction
 
 "----------------------------------------------------------------------
 
-function! DTEFindResults(quickfix_height, which)
+function! DTEOutput()
+    let &errorfile = g:visual_studio_output
+    call <Sid>DTEExec ('dte_output', &errorfile, 'output',
+\       g:visual_studio_quickfix_height, g:visual_studio_quickfix_errorformat, 1)
+endfunction
+
+"----------------------------------------------------------------------
+
+function! DTEFindResults(which)
     if a:which == 1
         let &errorfile = g:visual_studio_find_results_1
         let window_kind = 'find_results_1'
@@ -168,8 +214,32 @@ function! DTEFindResults(quickfix_height, which)
         let &errorfile = g:visual_studio_find_results_2
         let window_kind = 'find_results_2'
     endif
-    call <Sid>DTEExec ('dte_output', &errorfile, window_kind)
-    set errorformat=%f(%l):%m
-    call <Sid>QuickFixOpen (a:quickfix_height)
+    call <Sid>DTEExec ('dte_output', &errorfile, window_kind,
+\       g:visual_studio_quickfix_height, '%f(%l)\ %#:\ %#%m', 1)
+endfunction
+
+"----------------------------------------------------------------------
+
+function! DTECompileFile()
+    if ! DTEPutFile()
+        return
+    endif
+    " Need to cd to the directory of the file
+    " since error results have no path component
+    if strlen(expand('%:h')) > 0
+        cd %:h
+    endif
+    let &errorfile = g:visual_studio_output
+    call <Sid>DTEExec ('dte_compile_file', &errorfile,
+\       g:visual_studio_quickfix_height, g:visual_studio_quickfix_errorformat)
+endfunction
+
+"----------------------------------------------------------------------
+
+function! DTEBuildSolution()
+    let &errorfile = g:visual_studio_output
+    call <Sid>DTEExec ('dte_build_solution', &errorfile,
+\       g:visual_studio_write_before_build,
+\       g:visual_studio_quickfix_height, g:visual_studio_quickfix_errorformat)
 endfunction
 
