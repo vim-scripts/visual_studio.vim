@@ -5,7 +5,7 @@
 "
 " Version 1.2 Sep-07
 " Support for multiple instances and startup projects
-" Thanks for the work of Henrik Öhman <spiiph@hotmail.com>
+" Thanks for the work of Henrik ï¿½hman <spiiph@hotmail.com>
 "
 " Version 1.1 May-04
 " Support for compiling & building
@@ -30,17 +30,19 @@ endif
 " If setting special versions of the following vs_ files,
 " make sure to escape backslashes.
 
+let g:tempfolder = substitute($TEMP, '\\', '\\\\', 'g')
+
 if ! exists ('g:visual_studio_task_list')
-    let g:visual_studio_task_list = $TEMP.'\\vs_task_list.txt'
+    let g:visual_studio_task_list = g:tempfolder.'\\vs_task_list.txt'
 endif
 if ! exists ('g:visual_studio_output')
-    let g:visual_studio_output = $TEMP.'\\vs_output.txt'
+    let g:visual_studio_output = g:tempfolder.'\\vs_output.txt'
 endif
 if ! exists ('g:visual_studio_find_results_1')
-    let g:visual_studio_find_results_1 = $TEMP.'\\vs_find_results_1.txt'
+    let g:visual_studio_find_results_1 = g:tempfolder.'\\vs_find_results_1.txt'
 endif
 if ! exists ('g:visual_studio_find_results_2')
-    let g:visual_studio_find_results_2 = $TEMP.'\\vs_find_results_2.txt'
+    let g:visual_studio_find_results_2 = g:tempfolder.'\\vs_find_results_2.txt'
 endif
 if ! exists ('g:visual_studio_quickfix_height')
     let g:visual_studio_quickfix_height = 20
