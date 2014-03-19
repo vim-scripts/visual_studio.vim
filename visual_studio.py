@@ -143,18 +143,18 @@ def dte_task_list (vs_pid, fn_quickfix):
     logging.info ('== dte_task_list %s' % vars())
     fp_task_list = file (fn_quickfix, 'w')
     dte = _get_dte(vs_pid)
-    dte.ExecuteCommand ('View.TaskList')
+    dte.ExecuteCommand ('View.ErrorList')
     if not dte: return
     task_list = None
     for window in dte.Windows:
-        if str(window.Caption).startswith('Task List'):
+        if str(window.Caption).startswith('Error List'):
             task_list = window
     if not task_list:
-        _vim_msg ('Error: Task List window not active')
+        _vim_msg ('Error: Error List window not active')
         return
     TL = task_list.Object
-    for i in range (1, TL.TaskItems.Count+1):
-        TLItem = TL.TaskItems.Item(i)
+    for i in range (1, TL.ErrorItems.Count+1):
+        TLItem = TL.ErrorItems.Item(i)
         try: filename = TLItem.FileName
         except: filename = '<no-filename>'
         try: line = TLItem.Line
